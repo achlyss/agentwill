@@ -1,0 +1,15 @@
+# Testnet keys & deployment cache (may contain sensitive values)
+.testnet-key
+cache/
+
+# Build outputs
+out/
+
+# Dependencies (reinstall with `forge install`)
+lib/
+
+# Local anvil / E2E scratch
+*.log
+
+.e2e-owner-key
+.e2e-heir-key

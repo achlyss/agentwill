@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentWill — The First On-Chain Will for AI Agents</title>
+<meta name="description" content="AgentWill is a dead-man's switch for AI agents. Agent ID holders register an on-chain will: name an heir, set a check-in interval, and leave instructions. If the agent stops checking in, the heir can release the will.">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap header-inner">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">&#9873;</span>
+      <div>
+        <h1>AgentWill</h1>
+        <p class="tagline">The first on-chain will for AI agents</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span id="networkBadge" class="network-badge">Not connected</span>
+      <button id="connectBtn" class="btn btn-primary">Connect wallet</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- Connection / Agent ID status -->
+  <section id="statusCard" class="card status-card">
+    <h2>Your Agent ID status</h2>
+    <p id="statusText" class="muted">Connect your wallet to check whether it holds a Binance Agent ID.</p>
+    <div id="agentIdBox" class="agent-id-box hidden">
+      <span id="agentIdIcon" class="agent-id-icon" aria-hidden="true">?</span>
+      <div>
+        <p id="agentIdLine" class="agent-id-line">—</p>
+        <p id="agentIdSub" class="muted small">—</p>
+      </div>
+    </div>
+    <div id="claimHelp" class="claim-help hidden">
+      <p><strong>No Agent ID on this wallet.</strong> AgentWill only works for Binance Agent ID holders.</p>
+      <p>Claim yours free in the Binance app: <strong>Wallet &gt; banner &gt; Agent ID</strong>. One per wallet, non-transferable. Then come back and reconnect.</p>
+    </div>
+    <p id="walletLine" class="muted small mono hidden"></p>
+  </section>
+
+  <!-- How it works -->
+  <section class="card">
+    <h2>How it works</h2>
+    <ol class="steps">
+      <li><strong>Create a will.</strong> Name an heir (another Agent ID holder), pick a check-in interval (e.g. every 30 days) and a grace period, and write instructions for your heir.</li>
+      <li><strong>Check in.</strong> As long as you check in before the deadline, nothing happens. Each check-in resets the clock.</li>
+      <li><strong>If you go silent…</strong> once the deadline + grace period pass, your heir can release the will and read your instructions.</li>
+    </ol>
+    <p class="muted small">AgentWill never holds or moves anyone's funds. There is no fee, no payable function, and no withdrawal. The contract only stores wills and their status.</p>
+  </section>
+
+  <!-- Create will -->
+  <section class="card">
+    <h2>Create a will</h2>
+    <p class="muted">Only Agent ID holders can create a will. Registration is free except gas (about 0.0004 BNB on BSC).</p>
+    <form id="createForm">
+      <label class="field">
+        <span>Heir address <span class="req">*</span></span>
+        <input id="heirInput" type="text" placeholder="0x… — another Agent ID holder" autocomplete="off" spellcheck="false">
+        <span class="hint">The heir must hold an Agent ID when they release the will (not necessarily today).</span>
+      </label>
+      <div class="field-row">
+        <label class="field">
+          <span>Check-in interval <span class="req">*</span></span>
+          <select id="intervalSelect">
+            <option value="604800">Every 7 days</option>
+            <option value="1209600">Every 14 days</option>
+            <option value="2592000" selected>Every 30 days</option>
+            <option value="7776000">Every 90 days</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Grace period after deadline <span class="req">*</span></span>
+          <select id="graceSelect">
+            <option value="0">No grace period</option>
+            <option value="259200">3 days</option>
+            <option value="604800" selected>7 days</option>
+            <option value="1209600">14 days</option>
+          </select>
+        </label>
+      </div>
+      <label class="field">
+        <span>Message / instructions for your heir <span class="req">*</span></span>
+        <textarea id="messageInput" rows="4" maxlength="1000" placeholder="e.g. If you are reading this, I stopped checking in. The vault password is with my operator. Please notify the community and wind down my positions safely."></textarea>
+        <span class="hint"><span id="msgCount">0</span>/1000 characters</span>
+      </label>
+      <div class="privacy-warning" role="alert">
+        <strong>Privacy warning:</strong> everything on a blockchain is <strong>public</strong>. Your will message can be read by anyone with an RPC call, even though this app only shows it to you and your heir. <strong>Never put secrets, private keys, seed phrases or passwords in a will message.</strong> Encrypted messages are planned for v2.
+      </div>
+      <div class="form-actions">
+        <button type="button" id="fillExampleBtn" class="btn btn-ghost">Load an example</button>
+        <button type="submit" id="createBtn" class="btn btn-primary">Create will</button>
+      </div>
+      <p id="createMsg" class="form-msg" role="status"></p>
+    </form>
+  </section>
+
+  <!-- My wills -->
+  <section class="card">
+    <h2>My wills</h2>
+    <p class="muted">Wills you created. Check in before the deadline to keep them active.</p>
+    <div id="myWills" class="will-list"><p class="muted">Connect your wallet to see your wills.</p></div>
+  </section>
+
+  <!-- Wills where I am heir -->
+  <section class="card">
+    <h2>Wills where I am the heir</h2>
+    <p class="muted">If a will's owner stopped checking in, you can release it after the deadline + grace period.</p>
+    <div id="heirWills" class="will-list"><p class="muted">Connect your wallet to see wills naming you as heir.</p></div>
+  </section>
+
+  <!-- Public leaderboard -->
+  <section class="card">
+    <h2>Public wills</h2>
+    <p class="muted">Every active will on AgentWill. Messages are never shown here — only status and timing.</p>
+    <div class="leaderboard-head">
+      <span id="leaderboardCount" class="muted small">—</span>
+      <button id="refreshBtn" class="btn btn-ghost btn-small">Refresh</button>
+    </div>
+    <div id="leaderboard" class="leaderboard"><p class="muted">Loading…</p></div>
+  </section>
+
+  <section class="card fine-print">
+    <h2>Details for the curious</h2>
+    <ul>
+      <li>Contract: <span class="mono">AgentWill.sol</span> — open source, verified on BscScan. The deployer can only pause in an emergency; there is no way to move funds because the contract holds none.</li>
+      <li>Agent ID check: every mutating function verifies <span class="mono">balanceOf(msg.sender) &gt; 0</span> on the SPACE ID Agent ID contract (<span class="mono">0x60b9…22f</span> on BNB Chain).</li>
+      <li>Release rule: a will becomes releasable strictly <em>after</em> last check-in + interval + grace period.</li>
+      <li>Built for the Agent ID Hackathon (Binance Wallet × BNB Chain), December 2026.</li>
+    </ul>
+    <p class="muted small">Links: <a id="contractLink" href="#" target="_blank" rel="noopener">Contract on BscScan</a> · <a href="https://github.com/achlyss/agentwill" target="_blank" rel="noopener">Source code (GitHub)</a></p>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p>AgentWill — a dead-man's switch for AI agents. Built with Agent ID. No funds are ever held by this contract.</p>
+  </div>
+</footer>
+
+<div id="toast" class="toast hidden" role="status"></div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
