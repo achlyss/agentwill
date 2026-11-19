@@ -24,8 +24,8 @@
       name: "BSC Testnet",
       rpc: "https://data-seed-prebsc-1-s1.binance.org:8545",
       explorer: "https://testnet.bscscan.com",
-      agentId: "0xbf020b3C81945157cECe4794BB5657729365B5E8", // MockAgentID (testnet deploy 19 Nov 2026)
-      will: "0xa23452F669fdbB3532AA2C8Bc4D314cD88DaC8c1", // AgentWill (testnet deploy 19 Nov 2026)
+      agentId: "0x776eb4f84cb45e8892d526da8bf62d4748adc298", // MockAgentID (testnet v2 deploy 19 Nov 2026 — slow path)
+      will: "0xea517ca9f6053b270c345e241478baf7198d6da1", // AgentWill (testnet v2 deploy 19 Nov 2026 — slow path)
     },
   };
 

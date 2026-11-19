@@ -276,14 +276,85 @@ contract AgentWillTest is Test {
         will.releaseWill(willId);
     }
 
-    function test_Release_RevertsWhenHeirHasNoAgentID() public {
-        // Heir without an Agent ID can be named at creation, but cannot release.
+    function test_Release_HeirWithoutAgentId_SlowPath() public {
+        // Heir without an Agent ID can be named at creation. After the
+        // deadline + grace they cannot release yet (fast path needs an Agent
+        // ID), but after an extra NO_ID_RELEASE_DELAY the SAME heir may
+        // release without one — the will is never lost, it just takes longer.
         address noIdHeir = makeAddr("noIdHeir");
         uint256 willId = _createWillAs(owner, noIdHeir, INTERVAL, GRACE);
+        uint256 slowAt = will.noIdReleasableAt(willId);
+        assertEq(slowAt, will.releasableAt(willId) + will.NO_ID_RELEASE_DELAY());
+
         vm.warp(block.timestamp + INTERVAL + GRACE + 1);
+        assertFalse(will.isReleasableBy(willId, noIdHeir));
         vm.prank(noIdHeir);
-        vm.expectRevert(abi.encodeWithSelector(AgentWill.NotAgentIDHolder.selector, noIdHeir));
+        vm.expectRevert(
+            abi.encodeWithSelector(AgentWill.NotReleasableWithoutAgentId.selector, willId, slowAt)
+        );
         will.releaseWill(willId);
+
+        // Exactly at the slow-path time: still not releasable (strictly after).
+        vm.warp(slowAt);
+        assertFalse(will.isReleasableBy(willId, noIdHeir));
+        vm.prank(noIdHeir);
+        vm.expectRevert(
+            abi.encodeWithSelector(AgentWill.NotReleasableWithoutAgentId.selector, willId, slowAt)
+        );
+        will.releaseWill(willId);
+
+        // One second past: the same heir releases without an Agent ID.
+        vm.warp(slowAt + 1);
+        assertTrue(will.isReleasableBy(willId, noIdHeir));
+        vm.prank(noIdHeir);
+        will.releaseWill(willId);
+        assertEq(uint256(_readAsOwner(willId).status), uint256(AgentWill.Status.Released));
+        vm.prank(noIdHeir);
+        AgentWill.Will memory w = will.readWill(willId);
+        assertEq(w.message, MESSAGE);
+    }
+
+    function test_Release_HeirWithoutAgentId_BeforeDeadlineStillNotReleasableYet() public {
+        address noIdHeir = makeAddr("noIdHeir");
+        uint256 willId = _createWillAs(owner, noIdHeir, INTERVAL, GRACE);
+        uint256 releaseAt = will.releasableAt(willId);
+        vm.prank(noIdHeir);
+        vm.expectRevert(
+            abi.encodeWithSelector(AgentWill.NotReleasableYet.selector, willId, releaseAt)
+        );
+        will.releaseWill(willId);
+    }
+
+    function test_Release_StrangerCannotUseSlowPath() public {
+        // The slow path is for the SAME heir only — never a representative.
+        address noIdHeir = makeAddr("noIdHeir");
+        uint256 willId = _createWillAs(owner, noIdHeir, INTERVAL, GRACE);
+        vm.warp(will.noIdReleasableAt(willId) + 1);
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(AgentWill.NotHeir.selector, stranger));
+        will.releaseWill(willId);
+        // The owner cannot release either (only the heir can).
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(AgentWill.NotHeir.selector, owner));
+        will.releaseWill(willId);
+    }
+
+    function test_IsReleasableBy_FastVsSlowPath() public {
+        uint256 willId = _createWill(); // heir HOLDS a mock Agent ID
+        uint256 releaseAt = will.releasableAt(willId);
+        assertFalse(will.isReleasableBy(willId, heir));
+        assertFalse(will.isReleasableBy(willId, stranger));
+        vm.warp(releaseAt + 1);
+        assertTrue(will.isReleasableBy(willId, heir)); // fast path
+        assertFalse(will.isReleasableBy(willId, stranger));
+
+        address noIdHeir = makeAddr("noIdHeir");
+        uint256 willId2 = _createWillAs(owner, noIdHeir, INTERVAL, GRACE);
+        uint256 slowAt = will.noIdReleasableAt(willId2);
+        // Its own deadline is far in the future — not releasable by anyone yet.
+        assertFalse(will.isReleasableBy(willId2, noIdHeir));
+        vm.warp(slowAt + 1);
+        assertTrue(will.isReleasableBy(willId2, noIdHeir)); // slow path open
     }
 
     function test_Release_DoubleReleaseReverts() public {

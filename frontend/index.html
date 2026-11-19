@@ -48,9 +48,9 @@
   <section class="card">
     <h2>How it works</h2>
     <ol class="steps">
-      <li><strong>Create a will.</strong> Name an heir (another Agent ID holder), pick a check-in interval (e.g. every 30 days) and a grace period, and write instructions for your heir.</li>
+      <li><strong>Create a will.</strong> Name an heir (any wallet — an Agent ID holder releases right after the deadline, anyone else one year later), pick a check-in interval (e.g. every 30 days) and a grace period, and write instructions for your heir.</li>
       <li><strong>Check in.</strong> As long as you check in before the deadline, nothing happens. Each check-in resets the clock.</li>
-      <li><strong>If you go silent…</strong> once the deadline + grace period pass, your heir can release the will and read your instructions.</li>
+      <li><strong>If you go silent…</strong> once the deadline + grace period pass, your heir can release the will and read your instructions — immediately with an Agent ID, or one year later without one. Only the named heir can ever release it; no one can act for them.</li>
     </ol>
     <p class="muted small">AgentWill never holds or moves anyone's funds. There is no fee, no payable function, and no withdrawal. The contract only stores wills and their status.</p>
   </section>
@@ -62,8 +62,8 @@
     <form id="createForm">
       <label class="field">
         <span>Heir address <span class="req">*</span></span>
-        <input id="heirInput" type="text" placeholder="0x… — another Agent ID holder" autocomplete="off" spellcheck="false">
-        <span class="hint">The heir must hold an Agent ID when they release the will (not necessarily today).</span>
+        <input id="heirInput" type="text" placeholder="0x… — your heir's wallet address" autocomplete="off" spellcheck="false">
+        <span class="hint">Heirs with an Agent ID release right after the deadline. Without one, the same heir can still release one year later — never a representative.</span>
       </label>
       <div class="field-row">
         <label class="field">
@@ -130,8 +130,8 @@
     <h2>Details for the curious</h2>
     <ul>
       <li>Contract: <span class="mono">AgentWill.sol</span> — open source, verified on BscScan. The deployer can only pause in an emergency; there is no way to move funds because the contract holds none.</li>
-      <li>Agent ID check: every mutating function verifies <span class="mono">balanceOf(msg.sender) &gt; 0</span> on the SPACE ID Agent ID contract (<span class="mono">0x60b9…22f</span> on BNB Chain).</li>
-      <li>Release rule: a will becomes releasable strictly <em>after</em> last check-in + interval + grace period.</li>
+      <li>Agent ID check: creating a will requires an Agent ID (<span class="mono">balanceOf(msg.sender) &gt; 0</span> on the SPACE ID Agent ID contract, <span class="mono">0x60b9…22f</span> on BNB Chain). Releasing is immediate with one; without one, the same heir can still release one year after the deadline (the slow path).</li>
+      <li>Release rule: a will becomes releasable strictly <em>after</em> last check-in + interval + grace period (fast path, heir holds an Agent ID), or one year after that (slow path, same heir, no Agent ID needed).</li>
       <li>Built for the Agent ID Hackathon (Binance Wallet × BNB Chain), December 2026.</li>
     </ul>
     <p class="muted small">Links: <a id="contractLink" href="#" target="_blank" rel="noopener">Contract on BscScan</a> · <a href="https://github.com/achlyss/agentwill" target="_blank" rel="noopener">Source code (GitHub)</a></p>

@@ -18,7 +18,9 @@
     "function readWill(uint256 willId) view returns (tuple(address owner, address heir, uint256 checkInInterval, uint256 gracePeriod, uint256 lastCheckIn, uint8 status, string message))",
     "function getWillMeta(uint256 willId) view returns (tuple(address owner, address heir, uint256 checkInInterval, uint256 gracePeriod, uint256 lastCheckIn, uint256 releasableAt, uint8 status))",
     "function releasableAt(uint256 willId) view returns (uint256)",
+    "function noIdReleasableAt(uint256 willId) view returns (uint256)",
     "function isReleasable(uint256 willId) view returns (bool)",
+    "function isReleasableBy(uint256 willId, address account) view returns (bool)",
     "function totalWills() view returns (uint256)",
     "function getAllWillIds() view returns (uint256[])",
     "function getWillIdsByOwner(address account) view returns (uint256[])",
@@ -29,6 +31,7 @@
     "error CannotReadWill(address caller)",
     "error WillNotActive(uint256 willId)",
     "error NotReleasableYet(uint256 willId, uint256 releasableAt)",
+    "error NotReleasableWithoutAgentId(uint256 willId, uint256 noIdReleasableAt)",
     "error InvalidHeir(address heir)",
     "error InvalidInterval(uint256 interval)",
     "error WillDoesNotExist(uint256 willId)"
@@ -102,12 +105,22 @@
       CannotReadWill: "Only the will's owner — or the heir, after release — can read this will.",
       WillNotActive: "This will is no longer active (released or cancelled).",
       NotReleasableYet: "Too early: the deadline + grace period have not passed yet.",
+      NotReleasableWithoutAgentId: "Without an Agent ID, this will can only be released one year after the deadline (slow path). Claim an Agent ID to release it now.",
       InvalidHeir: "Pick a valid heir address (not empty, not your own address).",
       InvalidInterval: "The check-in interval must be longer than zero.",
       WillDoesNotExist: "That will does not exist.",
       ACTION_REJECTED: "Transaction rejected in your wallet. Nothing was sent.",
       CALL_EXCEPTION: "The transaction was rejected by the contract. Check the requirements above and try again."
     };
+    if (name === "NotReleasableWithoutAgentId") {
+      var when = null;
+      try {
+        var args = (err && err.args) || (err && err.error && err.error.args) || null;
+        if (args && args[1] !== undefined) when = args[1];
+      } catch (e2) { /* ignore */ }
+      if (when) return map[name] + " Available on " + fmtDate(when) + ".";
+      return map[name];
+    }
     if (name && map[name]) return map[name];
     var raw = (err && (err.shortMessage || err.message)) || "Transaction failed.";
     return raw.length > 220 ? raw.slice(0, 220) + "…" : raw;
@@ -231,6 +244,7 @@
     text.textContent = "";
     try {
       var bal = await state.agentIdRead.balanceOf(state.account);
+      state.hasAgentId = bal > 0n;
       box.classList.remove("hidden");
       if (bal > 0n) {
         box.classList.add("ok"); box.classList.remove("no");
@@ -242,7 +256,7 @@
         box.classList.add("no"); box.classList.remove("ok");
         icon.textContent = "✕";
         line.textContent = "This wallet does not hold a Binance Agent ID yet.";
-        sub.textContent = "AgentWill requires an Agent ID to create or release a will.";
+        sub.textContent = "Creating a will requires an Agent ID. Releasing is immediate with one — without one, the same heir can still release one year after the deadline.";
         help.classList.remove("hidden");
       }
     } catch (err) {
@@ -296,6 +310,13 @@
       var diff = st.key === "overdue" ? (now - st.until) : (st.until - now);
       cd.textContent = st.what + " " + fmtDuration(diff) + ".";
       div.appendChild(cd);
+    }
+
+    if (opts.noIdDate) {
+      var slow = document.createElement("p");
+      slow.className = "countdown";
+      slow.textContent = "No Agent ID? You can still release this will on " + fmtDate(opts.noIdDate) + " — or claim an Agent ID to release it now.";
+      div.appendChild(slow);
     }
 
     if (opts.message) {
@@ -373,10 +394,15 @@
       for (var i = ids.length - 1; i >= 0; i--) {
         var id = ids[i];
         var meta = await state.willRead.getWillMeta(id);
-        var releasable = await state.willRead.isReleasable(id);
+        var releasable = await state.willRead.isReleasableBy(id, state.account);
+        var noIdDate = null;
+        if (Number(meta.status) === 0 && state.hasAgentId === false) {
+          try { noIdDate = await state.willRead.noIdReleasableAt(id); } catch (e) { noIdDate = null; }
+        }
         var card = willCard(meta, Number(id), {
           canRelease: Number(meta.status) === 0 && releasable,
-          canRead: Number(meta.status) === 1
+          canRead: Number(meta.status) === 1,
+          noIdDate: noIdDate
         });
         box.appendChild(card);
       }
@@ -533,7 +559,7 @@
     var grace = Number($("graceSelect").value);
 
     if (!ethers.isAddress(heir)) { setMsg(msgEl, "Enter a valid heir address (0x…).", "error"); return; }
-    if (heir.toLowerCase() === state.account.toLowerCase()) { setMsg(msgEl, "The heir cannot be yourself — name another Agent ID holder.", "error"); return; }
+    if (heir.toLowerCase() === state.account.toLowerCase()) { setMsg(msgEl, "The heir cannot be yourself — name someone else.", "error"); return; }
     if (!message) { setMsg(msgEl, "Write a message for your heir first.", "error"); return; }
 
     var btn = $("createBtn");
